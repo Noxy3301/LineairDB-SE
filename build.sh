@@ -2,10 +2,50 @@
 
 cd $(dirname $0)
 
+# Ensure boost directory exists and download if needed
+echo "Checking boost dependency..."
+mkdir -p boost
+if [ ! -f "boost/boost_1_77_0.tar.bz2" ]; then
+    echo "Downloading boost 1.77.0..."
+    cd boost
+    wget -q https://sourceforge.net/projects/boost/files/boost/1.77.0/boost_1_77_0.tar.bz2
+    tar xfj boost_1_77_0.tar.bz2
+    cd ..
+fi
+
+# Apply LineairDB CMakeLists.txt fixes for compilation warnings
+echo "Applying LineairDB compilation fixes..."
+LINEAIRDB_CMAKE="third_party/LineairDB/CMakeLists.txt"
+if ! grep -q "target_compile_options.*-Wno-error" "$LINEAIRDB_CMAKE"; then
+    # Add include(GNUInstallDirs) if not present
+    if ! grep -q "include(GNUInstallDirs)" "$LINEAIRDB_CMAKE"; then
+        sed -i '/cmake_minimum_required/a include(GNUInstallDirs)' "$LINEAIRDB_CMAKE"
+    fi
+    
+    # Add -Wno-error flag to LineairDB library
+    sed -i '/add_library.*SOURCES/a target_compile_options(${PROJECT_NAME} PRIVATE -Wno-error)' "$LINEAIRDB_CMAKE"
+    echo "Applied LineairDB compilation fixes"
+fi
+
 ln -s $(pwd) third_party/mysql-server/storage/lineairdb
 
 mkdir -p build/data
 cd build
-cmake ../third_party/mysql-server -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DWITH_BUILD_ID=0 -DWITH_ASAN=0 -DCMAKE_BUILD_TYPE=Debug -DDOWNLOAD_BOOST=1 -DWITH_BOOST=./boost -DWITHOUT_EXAMPLE_STORAGE_ENGINE=1 -DWITHOUT_FEDERATED_STORAGE_ENGINE=1 -DWITHOUT_ARCHIVE_STORAGE_ENGINE=1 -DWITHOUT_BLACKHOLE_STORAGE_ENGINE=0 -DWITHOUT_NDB_STORAGE_ENGINE=1 -DWITHOUT_NDBCLUSTER_STORAGE_ENGINE=1 -DWITHOUT_PARTITION_STORAGE_ENGINE=1 -DWITH_BOOST=../boost -G Ninja
-# ./build.sh lineairdb_storage_engine
+
+cmake ../third_party/mysql-server \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
+    -DWITH_BUILD_ID=0 \
+    -DWITH_ASAN=0 \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DDOWNLOAD_BOOST=0 \
+    -DWITH_BOOST=../boost/boost_1_77_0 \
+    -DWITHOUT_EXAMPLE_STORAGE_ENGINE=1 \
+    -DWITHOUT_FEDERATED_STORAGE_ENGINE=1 \
+    -DWITHOUT_ARCHIVE_STORAGE_ENGINE=1 \
+    -DWITHOUT_BLACKHOLE_STORAGE_ENGINE=0 \
+    -DWITHOUT_NDB_STORAGE_ENGINE=1 \
+    -DWITHOUT_NDBCLUSTER_STORAGE_ENGINE=1 \
+    -DWITHOUT_PARTITION_STORAGE_ENGINE=1 \
+    -G Ninja
+
 ninja $1 -j `nproc`
